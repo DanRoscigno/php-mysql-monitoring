@@ -18,13 +18,11 @@ data:
     processors:
       - add_cloud_metadata:
 
-    cloud.id: ${ELASTIC_CLOUD_ID}
-    cloud.auth: ${ELASTIC_CLOUD_AUTH}
-
+    cloud.auth: elastic:${ELASTIC_PASSWORD}
+    cloud.id: ${CLOUD_ID}
+    
     output.elasticsearch:
-      hosts: ['${ELASTICSEARCH_HOST:elasticsearch}:${ELASTICSEARCH_PORT:9200}']
-      username: ${ELASTICSEARCH_USERNAME}
-      password: ${ELASTICSEARCH_PASSWORD}
+    
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -100,22 +98,16 @@ spec:
           "-system.hostfs=/hostfs",
         ]
         env:
-        - name: ELASTICSEARCH_HOST
-          value: elasticsearch
-        - name: ELASTICSEARCH_PORT
-          value: "9200"
-        - name: ELASTICSEARCH_USERNAME
-          value: elastic
-        - name: ELASTICSEARCH_PASSWORD
-          value: changeme
-        - name: ELASTIC_CLOUD_ID
-          value:
-        - name: ELASTIC_CLOUD_AUTH
-          value:
-        - name: POD_NAMESPACE
+        - name: CLOUD_ID
           valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
+            secretKeyRef:
+              name: dynamic-logging
+              key: CLOUD_ID
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: ELASTIC_PASSWORD
         securityContext:
           runAsUser: 0
         resources:
@@ -208,22 +200,16 @@ spec:
           "-e",
         ]
         env:
-        - name: ELASTICSEARCH_HOST
-          value: elasticsearch
-        - name: ELASTICSEARCH_PORT
-          value: "9200"
-        - name: ELASTICSEARCH_USERNAME
-          value: elastic
-        - name: ELASTICSEARCH_PASSWORD
-          value: changeme
-        - name: ELASTIC_CLOUD_ID
-          value:
-        - name: ELASTIC_CLOUD_AUTH
-          value:
-        - name: POD_NAMESPACE
+        - name: CLOUD_ID
           valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
+            secretKeyRef:
+              name: dynamic-logging
+              key: CLOUD_ID
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: ELASTIC_PASSWORD
         securityContext:
           runAsUser: 0
         resources:
