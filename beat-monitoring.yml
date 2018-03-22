@@ -66,7 +66,7 @@ data:
       - add_kubernetes_metadata:
       - add_docker_metadata:
 
-    cloud.auth: ${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}
+    cloud.auth: elastic:${ELASTIC_PASSWORD}
     cloud.id: ${CLOUD_ID}
 
     output.elasticsearch:
@@ -103,11 +103,6 @@ spec:
             secretKeyRef:
               name: dynamic-logging
               key: CLOUD_ID
-        - name: ELASTIC_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: dynamic-logging
-              key: ELASTIC_USERNAME
         - name: ELASTIC_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -233,8 +228,8 @@ data:
         - type: kubernetes
           host: ${HOSTNAME}
           templates:
-            - condition.regexp:
-                kubernetes.container.name: mysql
+            - condition.match:
+                kubernetes.labels.app: mysql
               config:
                 - module: mysql
                   period: 10s
@@ -243,8 +238,8 @@ data:
                   username: root
                   password: ${MYSQL_ROOT_PASSWORD}
     
-            - condition.regexp:
-                kubernetes.container.name: wordpress
+            - condition.match:
+                kubernetes.labels.app: wordpress
               config:
                 - module: apache
                   period: 10s
@@ -267,7 +262,7 @@ data:
     processors:
       - add_cloud_metadata:
 
-    cloud.auth: ${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}
+    cloud.auth: elastic:${ELASTIC_PASSWORD}
     cloud.id: ${CLOUD_ID}
 
     output.elasticsearch:
@@ -306,11 +301,6 @@ spec:
             secretKeyRef:
               name: dynamic-logging
               key: CLOUD_ID
-        - name: ELASTIC_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: dynamic-logging
-              key: ELASTIC_USERNAME
         - name: ELASTIC_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -431,7 +421,7 @@ data:
           - field_format:
               format: '%{[ip]}:%{[port]}'
 
-    cloud.auth: ${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}
+    cloud.auth: elastic:${ELASTIC_PASSWORD}
     cloud.id: ${CLOUD_ID}
 
     output.elasticsearch:
@@ -474,11 +464,6 @@ spec:
             secretKeyRef:
               name: dynamic-logging
               key: CLOUD_ID
-        - name: ELASTIC_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: dynamic-logging
-              key: ELASTIC_USERNAME
         - name: ELASTIC_PASSWORD
           valueFrom:
             secretKeyRef:
