@@ -70,12 +70,6 @@ data:
     cloud.id: ${CLOUD_ID}
 
     output.elasticsearch:
-      ssl:
-        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
-
-    setup.kibana:
-      ssl:
-        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
     
 ---
 apiVersion: extensions/v1beta1
@@ -133,10 +127,6 @@ spec:
           readOnly: true
         - name: dockersock
           mountPath: /var/run/docker.sock
-        - name: certificate
-          mountPath: /etc/certificate/ece-demo-server.pem
-          readOnly: true
-          subPath: ece-demo-server.pem
       volumes:
       - name: config
         configMap:
@@ -150,10 +140,6 @@ spec:
           path: /var/run/docker.sock
       - name: data
         emptyDir: {}
-      - name: certificate
-        configMap:
-          defaultMode: 0400
-          name: ece-demo-server.pem
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
@@ -285,12 +271,6 @@ data:
     cloud.id: ${CLOUD_ID}
 
     output.elasticsearch:
-      ssl:
-        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
-
-    setup.kibana:
-      ssl:
-        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
       
 ---
 # Deploy a Metricbeat instance per node for node metrics retrieval
@@ -356,10 +336,6 @@ spec:
         - name: cgroup
           mountPath: /hostfs/sys/fs/cgroup
           readOnly: true
-        - name: certificate
-          mountPath: /etc/certificate/ece-demo-server.pem
-          readOnly: true
-          subPath: ece-demo-server.pem
       volumes:
       - name: proc
         hostPath:
@@ -376,10 +352,6 @@ spec:
           name: metricbeat-dynamic-config
       - name: data
         emptyDir: {}
-      - name: certificate
-        configMap:
-          defaultMode: 0400
-          name: ece-demo-server.pem
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
@@ -463,12 +435,6 @@ data:
     cloud.id: ${CLOUD_ID}
 
     output.elasticsearch:
-      ssl:
-        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
-
-    setup.kibana:
-      ssl:
-        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
 
 ---
 apiVersion: extensions/v1beta1
@@ -525,10 +491,6 @@ spec:
           subPath: packetbeat.yml
         - name: data
           mountPath: /usr/share/packetbeat/data
-        - name: certificate
-          mountPath: /etc/certificate/ece-demo-server.pem
-          readOnly: true
-          subPath: ece-demo-server.pem
       volumes:
       - name: config
         configMap:
@@ -536,10 +498,6 @@ spec:
           name: packetbeat-dynamic-config
       - name: data
         emptyDir: {}
-      - name: certificate
-        configMap:
-          defaultMode: 0400
-          name: certificate
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
