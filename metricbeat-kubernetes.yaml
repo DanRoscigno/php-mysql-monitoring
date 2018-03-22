@@ -9,6 +9,12 @@ metadata:
     kubernetes.io/cluster-service: "true"
 data:
   metricbeat.yml: |-
+    setup.dashboards.enabled: true
+    setup.template.enabled: true
+    
+    setup.template.settings:
+      index.number_of_shards: 1
+      
     metricbeat.config.modules:
       # Mounted `metricbeat-daemonset-modules` configmap:
       path: ${path.config}/modules.d/*.yml
