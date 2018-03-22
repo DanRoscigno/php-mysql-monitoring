@@ -1,0 +1,579 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-dynamic-config
+  namespace: kube-system
+  labels:
+    k8s-app: filebeat-dynamic
+    kubernetes.io/cluster-service: "true"
+data:
+  filebeat.yml: |-
+    setup.dashboards.enabled: true
+    setup.template.enabled: true
+
+    setup.template.settings:
+      index.number_of_shards: 1
+
+    filebeat.autodiscover:
+      providers:
+        - type: kubernetes
+          templates:
+            - condition.equals:
+                kubernetes.labels.app: wordpress
+              config:
+                - module: apache2
+                  access:
+                    prospector:
+                      type: docker
+                      containers.ids:
+                        - ${data.kubernetes.container.id}
+                  error:
+                    prospector:
+                      type: docker
+                      containers.ids:
+                        - ${data.kubernetes.container.id}
+            - condition.equals:
+                kubernetes.labels.app: mysql
+              config:
+                - module: mysql
+                  error:
+                    prospector:
+                      type: docker
+                      containers.ids:
+                        - ${data.kubernetes.container.id}
+                  slowlog:
+                    prospector:
+                      type: docker
+                      containers.ids:
+                        - ${data.kubernetes.container.id}
+
+    processors:
+      - drop_event:
+          when.or:
+              - and:
+                  - regexp:
+                      message: '^\d+\.\d+\.\d+\.\d+ '
+                  - equals:
+                      fileset.name: error
+              - and:
+                  - not:
+                      regexp:
+                          message: '^\d+\.\d+\.\d+\.\d+ '
+                  - equals:
+                      fileset.name: access
+      - add_cloud_metadata:
+      - add_kubernetes_metadata:
+      - add_docker_metadata:
+
+    cloud.auth: ${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}
+    cloud.id: ${CLOUD_ID}
+
+    output.elasticsearch:
+      ssl:
+        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
+
+    setup.kibana:
+      ssl:
+        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
+    
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: filebeat-dynamic
+  namespace: kube-system
+  labels:
+    k8s-app: filebeat-dynamic
+    kubernetes.io/cluster-service: "true"
+spec:
+  template:
+    metadata:
+      labels:
+        k8s-app: filebeat-dynamic
+        kubernetes.io/cluster-service: "true"
+    spec:
+      serviceAccountName: filebeat-dynamic
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: filebeat-dynamic
+        image: docker.elastic.co/beats/filebeat:6.2.3
+        imagePullPolicy: Always
+        args: [
+          "-c", "/etc/filebeat.yml",
+          "-e",
+        ]
+        env:
+        - name: CLOUD_ID
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: CLOUD_ID
+        - name: ELASTIC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: ELASTIC_USERNAME
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: ELASTIC_PASSWORD
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: config
+          mountPath: /etc/filebeat.yml
+          readOnly: true
+          subPath: filebeat.yml
+        - name: data
+          mountPath: /usr/share/filebeat/data
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: dockersock
+          mountPath: /var/run/docker.sock
+        - name: certificate
+          mountPath: /etc/certificate/ece-demo-server.pem
+          readOnly: true
+          subPath: ece-demo-server.pem
+      volumes:
+      - name: config
+        configMap:
+          defaultMode: 0600
+          name: filebeat-dynamic-config
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: dockersock
+        hostPath:
+          path: /var/run/docker.sock
+      - name: data
+        emptyDir: {}
+      - name: certificate
+        configMap:
+          defaultMode: 0400
+          name: ece-demo-server.pem
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: filebeat-dynamic
+subjects:
+- kind: ServiceAccount
+  name: filebeat-dynamic
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: filebeat-dynamic
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: filebeat-dynamic
+  labels:
+    k8s-app: filebeat-dynamic
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources:
+  - namespaces
+  - pods
+  verbs:
+  - get
+  - watch
+  - list
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: filebeat-dynamic
+  namespace: kube-system
+  labels:
+    k8s-app: filebeat-dynamic
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: metricbeat-dynamic-config
+  namespace: kube-system
+  labels:
+    k8s-app: metricbeat-dynamic
+    kubernetes.io/cluster-service: "true"
+data:
+  metricbeat.yml: |-
+    setup.dashboards.enabled: true
+    setup.template.enabled: true
+
+    setup.template.settings:
+      index.number_of_shards: 1
+
+    metricbeat.modules:
+      - module: system
+        period: 10s
+        metricsets:
+          - cpu
+          - load
+          - memory
+          - network
+          - process
+          - process_summary
+        processes: ['.*']
+        process.include_top_n:
+          by_cpu: 5      # include top 5 processes by CPU
+          by_memory: 5   # include top 5 processes by memory
+
+      - module: system
+        period: 1m
+        metricsets:
+          - filesystem
+          - fsstat
+        processors:
+        - drop_event.when.regexp:
+            system.filesystem.mount_point: '^/(sys|cgroup|proc|dev|etc|host|lib)($|/)'
+
+      - module: kubernetes
+        period: 10s
+        metricsets:
+          - node
+          - system
+          - pod
+          - container
+          - volume
+        hosts: ["localhost:10255"]
+
+    metricbeat.autodiscover:
+      providers:
+        - type: kubernetes
+          host: ${HOSTNAME}
+          templates:
+            - condition.regexp:
+                kubernetes.container.name: mysql
+              config:
+                - module: mysql
+                  period: 10s
+                  metricsets: ["status"]
+                  hosts: ["tcp(${data.host}:3306)/"]
+                  username: root
+                  password: ${MYSQL_ROOT_PASSWORD}
+    
+            - condition.regexp:
+                kubernetes.container.name: wordpress
+              config:
+                - module: apache
+                  period: 10s
+                  metricsets: ["status"]
+                  hosts: ["${data.host}:80"]
+    
+            - condition.regexp:
+                kubernetes.container.name: kube-state-metrics
+              config:
+                - module: kubernetes
+                  period: 10s
+                  metricsets:
+                    - state_node
+                    - state_deployment
+                    - state_replicaset
+                    - state_pod
+                    - state_container
+                  hosts: ["${data.host}:8080"]
+
+    processors:
+      - add_cloud_metadata:
+
+    cloud.auth: ${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}
+    cloud.id: ${CLOUD_ID}
+
+    output.elasticsearch:
+      ssl:
+        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
+
+    setup.kibana:
+      ssl:
+        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
+      
+---
+# Deploy a Metricbeat instance per node for node metrics retrieval
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: metricbeat-dynamic
+  namespace: kube-system
+  labels:
+    k8s-app: metricbeat-dynamic
+    kubernetes.io/cluster-service: "true"
+spec:
+  template:
+    metadata:
+      labels:
+        k8s-app: metricbeat-dynamic
+        kubernetes.io/cluster-service: "true"
+    spec:
+      serviceAccountName: metricbeat-dynamic
+      hostNetwork: true
+      containers:
+      - name: metricbeat-dynamic
+        image: docker.elastic.co/beats/metricbeat:6.2.3
+        imagePullPolicy: Always
+        args: [
+          "-c", "/etc/metricbeat.yml",
+          "-e",
+          "-system.hostfs=/hostfs",
+        ]
+        env:
+        - name: CLOUD_ID
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: CLOUD_ID
+        - name: ELASTIC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: ELASTIC_USERNAME
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: ELASTIC_PASSWORD
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql
+              key: password
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: config
+          mountPath: /etc/metricbeat.yml
+          readOnly: true
+          subPath: metricbeat.yml
+        - name: dockersock
+          mountPath: /var/run/docker.sock
+        - name: proc
+          mountPath: /hostfs/proc
+          readOnly: true
+        - name: cgroup
+          mountPath: /hostfs/sys/fs/cgroup
+          readOnly: true
+        - name: certificate
+          mountPath: /etc/certificate/ece-demo-server.pem
+          readOnly: true
+          subPath: ece-demo-server.pem
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: cgroup
+        hostPath:
+          path: /sys/fs/cgroup
+      - name: dockersock
+        hostPath:
+          path: /var/run/docker.sock
+      - name: config
+        configMap:
+          defaultMode: 0600
+          name: metricbeat-dynamic-config
+      - name: data
+        emptyDir: {}
+      - name: certificate
+        configMap:
+          defaultMode: 0400
+          name: ece-demo-server.pem
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: metricbeat-dynamic
+subjects:
+- kind: ServiceAccount
+  name: metricbeat-dynamic
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: metricbeat-dynamic
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: metricbeat-dynamic
+  labels:
+    k8s-app: metricbeat-dynamic
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources:
+  - namespaces
+  - events
+  - pods
+  verbs:
+  - get
+  - watch
+  - list
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: metricbeat-dynamic
+  namespace: kube-system
+  labels:
+    k8s-app: metricbeat-dynamic
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: packetbeat-dynamic-config
+  namespace: kube-system
+  labels:
+    k8s-app: packetbeat-dynamic
+    kubernetes.io/cluster-service: "true"
+data:
+  packetbeat.yml: |-
+    setup.dashboards.enabled: true
+    setup.template.enabled: true
+
+    setup.template.settings:
+      index.number_of_shards: 2
+
+    packetbeat.interfaces.device: any
+
+    packetbeat.protocols:
+    - type: dns
+      ports: [53]
+      include_authorities: true
+      include_additionals: true
+
+    - type: http
+      ports: [80, 8000, 8080, 9200]
+
+    - type: mysql
+      ports: [3306]
+
+    processors:
+      - add_cloud_metadata:
+      - add_kubernetes_metadata:
+          host: ${HOSTNAME}
+          indexers:
+          - ip_port:
+          matchers:
+          - field_format:
+              format: '%{[ip]}:%{[port]}'
+
+    cloud.auth: ${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}
+    cloud.id: ${CLOUD_ID}
+
+    output.elasticsearch:
+      ssl:
+        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
+
+    setup.kibana:
+      ssl:
+        certificate_authorities: ["/etc/certificate/ece-demo-server.pem"]
+
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: packetbeat-dynamic
+  namespace: kube-system
+  labels:
+    k8s-app: packetbeat-dynamic
+    kubernetes.io/cluster-service: "true"
+spec:
+  template:
+    metadata:
+      labels:
+        k8s-app: packetbeat-dynamic
+        kubernetes.io/cluster-service: "true"
+    spec:
+      serviceAccountName: packetbeat-dynamic
+      terminationGracePeriodSeconds: 30
+      hostNetwork: true
+      containers:
+      - name: packetbeat-dynamic
+        image: docker.elastic.co/beats/packetbeat:6.2.3
+        imagePullPolicy: Always
+        args: [
+          "-c", "/etc/packetbeat.yml",
+          "-e",
+        ]
+        securityContext:
+          runAsUser: 0
+          capabilities:
+            add:
+            - NET_ADMIN
+        env:
+        - name: CLOUD_ID
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: CLOUD_ID
+        - name: ELASTIC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: ELASTIC_USERNAME
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dynamic-logging
+              key: ELASTIC_PASSWORD
+        volumeMounts:
+        - name: config
+          mountPath: /etc/packetbeat.yml
+          readOnly: true
+          subPath: packetbeat.yml
+        - name: data
+          mountPath: /usr/share/packetbeat/data
+        - name: certificate
+          mountPath: /etc/certificate/ece-demo-server.pem
+          readOnly: true
+          subPath: ece-demo-server.pem
+      volumes:
+      - name: config
+        configMap:
+          defaultMode: 0600
+          name: packetbeat-dynamic-config
+      - name: data
+        emptyDir: {}
+      - name: certificate
+        configMap:
+          defaultMode: 0400
+          name: certificate
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: packetbeat-dynamic
+subjects:
+- kind: ServiceAccount
+  name: packetbeat-dynamic
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: packetbeat-dynamic
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: packetbeat-dynamic
+  labels:
+    k8s-app: packetbeat-dynamic
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources:
+  - namespaces
+  - pods
+  verbs:
+  - get
+  - watch
+  - list
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: packetbeat-dynamic
+  namespace: kube-system
+  labels:
+    k8s-app: packetbeat-dynamic
