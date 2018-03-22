@@ -1,4 +1,9 @@
 # php-mysql-monitoring
+## To Do
+1. Get all the modules that we need added
+1. Check that Wordpress logs are being generated
+1. Look at Geo-IP config
+1. Generate some load
 
 ## Goal
 
