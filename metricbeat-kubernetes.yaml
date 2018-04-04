@@ -65,6 +65,21 @@ data:
       processors:
       - drop_event.when.regexp:
           system.filesystem.mount_point: '^/(sys|cgroup|proc|dev|etc|host|lib)($|/)'
+        metricbeat.autodiscover:
+      providers:
+        - type: kubernetes
+          host: ${HOSTNAME}
+          templates:
+            - condition.regexp:
+                kubernetes.container.name: mysql
+              config:
+                - module: mysql
+                  period: 10s
+                  metricsets: ["status"]
+                  hosts: ["tcp(${data.host}:3306)/"]
+                  username: root
+                  password: ${MYSQL_ROOT_PASSWORD}
+
   kubernetes.yml: |-
     - module: kubernetes
       metricsets:
@@ -114,6 +129,11 @@ spec:
             secretKeyRef:
               name: dynamic-logging
               key: ELASTIC_PASSWORD
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-pass
+              key: MYSQL_PASSWORD
         securityContext:
           runAsUser: 0
         resources:
@@ -216,6 +236,11 @@ spec:
             secretKeyRef:
               name: dynamic-logging
               key: ELASTIC_PASSWORD
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-pass
+              key: MYSQL_PASSWORD
         securityContext:
           runAsUser: 0
         resources:
