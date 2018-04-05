@@ -60,6 +60,15 @@ data:
         - type: kubernetes
           host: ${HOSTNAME}
           templates:
+            - condition.equals:
+                kubernetes.labels.app: wordpress
+              config:
+                - module: apache
+                  metricsets: ["status"]
+                  period: 10s
+
+                  # Apache hosts
+                  hosts: ["http://${data.host}:80"]
             - condition.contains:
                 kubernetes.container.name: mysql
               config:
