@@ -257,6 +257,31 @@ spec:
           defaultMode: 0600
           name: metricbeat-deployment-config
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: metricbeat-setup-config
+  namespace: kube-system
+  labels:
+    k8s-app: metricbeat
+    kubernetes.io/cluster-service: "true"
+data:
+  metricbeat.yml: |-
+    metricbeat.config.modules:
+      path: ${path.config}/modules.d/*.yml
+      reload.enabled: false
+
+    setup.template.settings:
+      index.number_of_shards: 1
+      index.codec: best_compression
+
+    cloud.auth: elastic:${ELASTIC_PASSWORD}
+    cloud.id: ${CLOUD_ID}
+    
+    output.elasticsearch:
+
+    setup.kibana:
+---
 # Run metricbeat setup
 apiVersion: batch/v1
 kind: Job
@@ -309,7 +334,7 @@ spec:
       - name: config
         configMap:
           defaultMode: 0600
-          name: metricbeat-config
+          name: metricbeat-setup-config
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
