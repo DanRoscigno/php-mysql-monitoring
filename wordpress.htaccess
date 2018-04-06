@@ -7,6 +7,6 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.php [L]
 # rewrite 404 for server status
-# RewriteCond %{REQUEST_URI} !=/server-status
+RewriteCond %{REQUEST_URI} !=/server-status
 </IfModule>
 # END WordPress
